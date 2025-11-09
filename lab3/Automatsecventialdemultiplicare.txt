@@ -1,0 +1,370 @@
+Automat secvential de multiplicare
+// Definirea modulului sequential_multiplier
+module sequential_multiplier #(
+    parameter DATA_WIDTH = 8,
+    // Rezultatul inmultirii va fi de 2 * DATA_WIDTH
+    parameter RESULT_WIDTH = DATA_WIDTH * 2
+) (
+    input clk,
+    input rst_n,
+
+    // Semnale de control de la utilizator (Inputuri pentru FSM)
+    input write,        // Prioritate 1: Scrie a si b in registre
+    input multiply,     // Prioritate 2: Extrage, inmulteste si salveaza rezultatul
+    input display,      // Prioritate 3: Afiseaza rezultatul
+
+    // Intrari si Iesiri de date
+    input [DATA_WIDTH-1:0] a_in,
+    input [DATA_WIDTH-1:0] b_in,
+    output reg [RESULT_WIDTH-1:0] out   // Iesirea finala
+);
+
+// --- Definirea Starilor FSM ---
+localparam [1:0] 
+    IDLE          = 2'b00,  // Asteptare comenzi
+    WRITE_OP      = 2'b01,  // Scrierea operanzilor (a si b)
+    MULTIPLY_OP   = 2'b10,  // Efectuarea inmultirii
+    DISPLAY_OUT   = 2'b11;  // Afisarea rezultatului (din registrul C)
+
+reg [1:0] current_state, next_state;
+
+// --- Semnale interne pentru registre ---
+// Registrele A si B (pentru operanzi)
+wire [DATA_WIDTH-1:0] reg_a_out, reg_b_out;
+wire [DATA_WIDTH-1:0] reg_a_disp, reg_b_disp;
+reg reg_a_we, reg_b_we, reg_a_oe, reg_b_oe;
+
+// Registrul C (pentru rezultat)
+wire [RESULT_WIDTH-1:0] reg_c_out, reg_c_disp;
+reg reg_c_we, reg_c_oe;
+
+// Variabile pentru stocarea rezultatului inmultirii (interne FSM)
+reg [RESULT_WIDTH-1:0] multiplication_result;
+
+// ----------------------------------------------------
+// I. INSTANTIEREA REGISTRELOR
+// ----------------------------------------------------
+
+// Registrul A (Operand 1)
+Register #(
+    .DATA_WIDTH(DATA_WIDTH)
+) RegA (
+    .clk(clk),
+    .rst_n(rst_n),
+    .we(reg_a_we),
+    .oe(reg_a_oe), // Nu este neaparat necesar, dar pastram interfata
+    .data_in(a_in),
+    .data_out(reg_a_out),
+    .disp_out(reg_a_disp)
+);
+
+// Registrul B (Operand 2)
+Register #(
+    .DATA_WIDTH(DATA_WIDTH)
+) RegB (
+    .clk(clk),
+    .rst_n(rst_n),
+    .we(reg_b_we),
+    .oe(reg_b_oe), // Nu este neaparat necesar, dar pastram interfata
+    .data_in(b_in),
+    .data_out(reg_b_out),
+    .disp_out(reg_b_disp)
+);
+
+// Registrul C (Rezultat)
+Register #(
+    .DATA_WIDTH(RESULT_WIDTH)
+) RegC (
+    .clk(clk),
+    .rst_n(rst_n),
+    .we(reg_c_we),
+    .oe(reg_c_oe), // Semnalul 'oe' al registrului C controleaza direct 'out'
+    .data_in(multiplication_result),
+    .data_out(reg_c_out),
+    .disp_out(reg_c_disp)
+);
+
+// Conexiunea Logica intre Registrul C si Iesirea finala 'out'
+// Iesirea 'out' ia valoarea din registrul C doar cand reg_c_oe este activ
+always @(*) begin
+    // Aceasta logica asincrona ar trebui sa fie in modulul Register,
+    // dar o replicam aici pentru a folosi output-ul reg_c_out
+    out = reg_c_oe ? reg_c_disp : {RESULT_WIDTH{1'b0}}; 
+end
+
+
+// ----------------------------------------------------
+// II. FSM: TRANZITII DE STARE (Logica Sincrona)
+// ----------------------------------------------------
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        current_state <= IDLE;
+    end else begin
+        current_state <= next_state;
+    end
+end
+
+// ----------------------------------------------------
+// III. FSM: LOGICA NEXT_STATE (Logica Combinationala)
+// ----------------------------------------------------
+always @(*) begin
+    next_state = current_state; // Default: ramane in starea curenta
+
+    case (current_state)
+        IDLE: begin
+            if (write) begin
+                next_state = WRITE_OP;
+            end else if (multiply) begin
+                next_state = MULTIPLY_OP;
+            end else if (display) begin
+                next_state = DISPLAY_OUT;
+            end
+            // Daca niciun semnal nu e activ, ramane in IDLE
+        end
+        
+        WRITE_OP: begin
+            // Prioritate: write > multiply > display.
+            // Odata ce scrierea este facuta, revenim la IDLE,
+            // sau putem evalua direct urmatoarea comanda:
+            if (write) begin
+                next_state = WRITE_OP; // Ramane o tactare in WRITE pentru a asigura WE=1
+            end else if (multiply) begin
+                next_state = MULTIPLY_OP;
+            end else if (display) begin
+                next_state = DISPLAY_OUT;
+            end else begin
+                next_state = IDLE;
+            end
+        end
+
+        MULTIPLY_OP: begin
+            // Dupa ce inmultirea este finalizata, evaluam urmatoarea comanda
+            if (write) begin
+                next_state = WRITE_OP;
+            end else if (multiply) begin
+                next_state = MULTIPLY_OP; // Ramane o tactare in MULTIPLY pentru a asigura WE=1
+            end else if (display) begin
+                next_state = DISPLAY_OUT;
+            end else begin
+                next_state = IDLE;
+            end
+        end
+
+        DISPLAY_OUT: begin
+            // Dupa ce afisarea este finalizata, evaluam urmatoarea comanda
+            if (write) begin
+                next_state = WRITE_OP;
+            end else if (multiply) begin
+                next_state = MULTIPLY_OP;
+            end else if (display) begin
+                next_state = DISPLAY_OUT; // Ramane in DISPLAY cat timp este activ
+            end else begin
+                next_state = IDLE;
+            end
+        end
+
+        default: next_state = IDLE;
+    endcase
+end
+
+// ----------------------------------------------------
+// IV. FSM: LOGICA DE IESIRE (Controlul Registrelor si Multiplicarea)
+// ----------------------------------------------------
+always @(*) begin
+    // Default: Toate WE si OE sunt inactive
+    reg_a_we = 0;
+    reg_b_we = 0;
+    reg_c_we = 0;
+    reg_c_oe = 0;
+    
+    // Multiplicarea se face mereu pe valorile din registrele A si B
+    // Folosim iesirea de debugging (disp_out) pentru a evita intarzierile de la 'data_out'
+    // Logica multiplicarii (combinationala)
+    multiplication_result = reg_a_disp * reg_b_disp;
+
+    case (current_state)
+        
+        WRITE_OP: begin
+            // Activeaza Write Enable pentru registrele A si B
+            reg_a_we = 1;
+            reg_b_we = 1;
+            // reg_c_we = 0 (Rezultatul NU este scris inca)
+        end
+        
+        MULTIPLY_OP: begin
+            // Activeaza Write Enable pentru registrul C.
+            // Valoarea scrisa este 'multiplication_result' calculata combinational.
+            reg_c_we = 1;
+            // reg_a_we = 0, reg_b_we = 0 (Operanzii nu se modifica)
+        end
+        
+        DISPLAY_OUT: begin
+            // Activeaza Output Enable pentru registrul C.
+            // out <= valoarea din RegC
+            reg_c_oe = 1; 
+        end
+        
+        IDLE: begin
+            // Toate inactive. 'out' este 0 deoarece reg_c_oe = 0 (conform default)
+        end
+        
+    endcase
+end
+
+// ----------------------------------------------------
+// V. Logica de Debugging (Optional, dar utila)
+// ----------------------------------------------------
+/*
+// Iesiri de debugging pentru a vedea valoarea interna a registrelor
+assign a_mem_debug = reg_a_disp;
+assign b_mem_debug = reg_b_disp;
+assign c_mem_debug = reg_c_disp;
+*/
+
+endmodule
+
+TestBench
+`timescale 1ns / 1ps
+
+module sequential_multiplier_tb;
+
+    // Parametri de data width
+    localparam DATA_WIDTH = 4; // Folosim 4 biti pentru a avea rezultatul de 8 biti (4*4=16 -> 8 biti)
+    localparam RESULT_WIDTH = DATA_WIDTH * 2;
+    localparam CLK_PERIOD = 10;
+
+    // Semnale pentru test bench
+    reg clk;
+    reg rst_n;
+
+    reg write;
+    reg multiply;
+    reg display;
+
+    reg [DATA_WIDTH-1:0] a_in;
+    reg [DATA_WIDTH-1:0] b_in;
+
+    wire [RESULT_WIDTH-1:0] out;
+
+    // Instantierea DUT (Device Under Test)
+    sequential_multiplier #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .RESULT_WIDTH(RESULT_WIDTH)
+    ) DUT (
+        .clk(clk),
+        .rst_n(rst_n),
+        .write(write),
+        .multiply(multiply),
+        .display(display),
+        .a_in(a_in),
+        .b_in(b_in),
+        .out(out)
+    );
+
+    // Generarea Ceasului
+    initial begin
+        clk = 0;
+        forever #(CLK_PERIOD/2) clk = ~clk;
+    end
+
+    // Secventa de Test
+    initial begin
+        $display("------------------------------------------------------------------");
+        $display("Incepere Simularea Multiplicatorului Secvential (DATA_WIDTH=%0d)", DATA_WIDTH);
+        
+        // 0. Initializare si Reset
+        rst_n = 0;   // Activeaza Reset
+        write = 0;
+        multiply = 0;
+        display = 0;
+        a_in = 4'hA; // 10
+        b_in = 4'h3; // 3
+        
+        #(CLK_PERIOD * 2); 
+        rst_n = 1;   // Dezactiveaza Reset
+        $display("T=%0t | STARE: RESET. out = 0x%h", $time, out);
+
+        // 1. SCENARIU 1: Secventa normala: WRITE -> MULTIPLY -> DISPLAY
+        
+        // Pas 1.1: WRITE (Scrie A=10, B=3)
+        $display("--- TEST 1: Secventa Normala (10 * 3 = 30) ---");
+        write = 1;
+        a_in = 4'hA; // 10
+        b_in = 4'h3; // 3
+        
+        #(CLK_PERIOD); // Scrierea se face la frontul crescator
+        write = 0;
+        $display("T=%0t | STARE: IDLE (Dupa Write). out = 0x%h. Inregistrat A=10, B=3.", $time, out);
+        
+        // Pas 1.2: MULTIPLY (Calculeaza 10 * 3 = 30 (0x1E))
+        multiply = 1;
+        #(CLK_PERIOD); // Multiplicarea si Salvarea Rezultatului (sincron)
+        multiply = 0;
+        $display("T=%0t | STARE: IDLE (Dupa Multiply). out = 0x%h. Rezultatul ar trebui sa fie salvat intern (0x1E).", $time, out);
+        
+        // Pas 1.3: DISPLAY (Afiseaza 30)
+        display = 1;
+        #5; // Asincron
+        $display("T=%0t | STARE: DISPLAY (Asincron). out = 0x%h. Expected: 0x1E (30)", $time, out);
+        
+        #(CLK_PERIOD * 1);
+        display = 0;
+        $display("T=%0t | STARE: IDLE. out = 0x%h", $time, out);
+        
+        // 2. SCENARIU 2: Testarea Prioritatilor
+        $display("--- TEST 2: Prioritati (WRITE > MULTIPLY > DISPLAY) ---");
+
+        // Pas 2.1: WRITE si MULTIPLY simultan (WRITE are prioritate)
+        write = 1;
+        multiply = 1;
+        a_in = 4'h5; // 5
+        b_in = 4'h6; // 6
+        
+        #(CLK_PERIOD); // FSM ar trebui sa treaca in WRITE_OP si sa scrie 5 si 6
+        
+        write = 0;
+        $display("T=%0t | STARE: IDLE (Dupa Prioritate Write). out = 0x%h. A=5, B=6 ar trebui sa fie scrise.", $time, out);
+
+        // Pas 2.2: MULTIPLY si DISPLAY simultan (MULTIPLY are prioritate)
+        multiply = 1;
+        display = 1;
+        
+        #(CLK_PERIOD); // FSM ar trebui sa treaca in MULTIPLY_OP (Calculeaza 5 * 6 = 30 (0x1E))
+        
+        multiply = 0;
+        $display("T=%0t | STARE: IDLE (Dupa Prioritate Multiply). out = 0x%h. Rezultatul 0x1E ar trebui salvat.", $time, out);
+
+        // Pas 2.3: DISPLAY (Afiseaza noul rezultat)
+        display = 1;
+        #5;
+        $display("T=%0t | STARE: DISPLAY. out = 0x%h. Expected: 0x1E (30)", $time, out);
+
+        #(CLK_PERIOD);
+        display = 0;
+
+        // 3. SCENARIU 3: Testarea scrierii cu o valoare mai mare (15 * 15 = 225)
+        $display("--- TEST 3: Valoare Maxima (15 * 15 = 225 / 0xE1) ---");
+        
+        write = 1;
+        a_in = 4'hF; // 15
+        b_in = 4'hF; // 15
+        #(CLK_PERIOD);
+        write = 0;
+        
+        multiply = 1;
+        #(CLK_PERIOD);
+        multiply = 0;
+        
+        display = 1;
+        #5;
+        $display("T=%0t | STARE: DISPLAY. out = 0x%h. Expected: 0xE1 (225)", $time, out);
+        
+        #(CLK_PERIOD);
+        display = 0;
+
+        $display("------------------------------------------------------------------");
+        $display("Simulare incheiata.");
+        $finish;
+    end
+    
+endmodule
