@@ -1,111 +1,101 @@
-🖥️ Digital Logic Design Labs (Verilog HDL)
+🚀 Verilog Labs: Sequential & Arithmetic Logic (AC/SD) 🔢
 
-This repository contains the results of the laboratory assignments for the Computer Architecture (AC) / Digital Logic Design (DLD) course. The implementations are designed in Verilog HDL and simulated using iverilog/GTKWave.
+Welcome to my repository for Computer Architecture (AC) / Digital Systems (SD) labs. This collection showcases fundamental digital circuits implemented in Verilog HDL, focusing on the construction and control of arithmetic components using sequential logic.
 
-The focus of these labs is to understand and implement fundamental arithmetic and sequential logic circuits.
+The goal was to master parameterization, FSM design, and synchronous data flow.
 
-🛠️ Implemented Modules
+✨ Project Highlights
 
-Below is a list of the core modules implemented, grouped by type.
+1. ⚙️ Finite State Machine (FSM) & Sequential Core
 
-1. 🔢 Arithmetic Logic Unit (ALU) Components
-
-These modules perform basic arithmetic and comparison operations.
+The most complex modules, demonstrating multi-cycle operation and state control.
 
 Module
 
-Description
+Core Functionality
 
 Key Features
-
-full_adder
-
-Basic full adder cell.
-
-1-bit addition with carry-in/carry-out.
-
-adder_4bit
-
-4-bit Ripple Carry Adder.
-
-Implemented by cascading 4 full-adder modules.
-
-comparator
-
-1-bit Comparator.
-
-Generates less, equal, and greater outputs.
-
-comparator_Nbit
-
-N-bit Comparator.
-
-Scalable design for comparing larger data widths.
-
-2. ⚡ Sequential and Control Logic
-
-This section includes more complex circuits using registers and Finite State Machines (FSMs).
-
-Module
-
-Description
-
-Key Features
-
-Register
-
-Generic Data Register.
-
-Parameterized data width, synchronous load (we), and asynchronous output control (oe).
 
 sequential_multiplier
 
-Automatic Sequential Multiplier.
+Automatic 4-bit Multiplier
 
-Implements multiplication using a simple FSM and dedicated registers (A, B for operands, C for result).
+Uses an FSM to manage WRITE, MULTIPLY, and DISPLAY cycles, coordinating data transfer between registers.
 
-testbench_sm
+Register
 
-Testbench for Multiplier.
+Parameterized Data Register
 
-Simulates the sequence: WRITE operants, MULTIPLY, and DISPLAY result.
+Synchronous data loading (we) and asynchronous output control (oe) for bus sharing.
 
-🚀 How to Run Simulations
+sequential_multiplier_tb
 
-To test any module (e.g., the 4-bit multiplier), follow these steps:
+FSM Testbench
 
-Clone the Repository:
+Includes scenarios to verify priority logic and state transitions (e.g., WRITE has priority over MULTIPLY).
 
-git clone [your_repo_link]
-cd [repo_name]
+2. 🧮 Combinational Arithmetic
+
+Building blocks for the ALU and larger arithmetic circuits.
+
+Module
+
+Functionality
+
+Data Width
+
+adder_4bit
+
+4-bit Ripple Carry Adder
+
+Implements standard binary addition by cascading 4 full adder cells.
+
+comparator
+
+1-bit Comparator
+
+Generates explicit less, equal, and greater outputs for logic decisions.
+
+comparator_Nbit
+
+N-bit Comparator
+
+Scalable implementation for comparing two N-bit vectors.
+
+🔬 Running the Simulations
+
+All modules are tested using dedicated testbenches (_tb.v) configured to generate waveform data.
+
+Prerequisites
+
+You need Icarus Verilog (iverilog) and GTKWave installed to run and view the results.
+
+Step-by-Step Guide
+
+Compile the Circuit: Include the main module and all its dependencies (e.g., Registers) along with the testbench.
+
+# Example: Compiling the Sequential Multiplier
+iverilog -o sim_output sequential_multiplier.v Register.v sequential_multiplier_tb.v
 
 
-Compile the Verilog Files:
-Use iverilog to compile the core module (.v) and its testbench (_tb.v). Make sure all dependencies (like Register.v and adder.v) are included.
+Run the Simulation: This executes the test cases and generates the waveform file (wave.vcd).
 
-iverilog -o multiplier_sim sequential_multiplier.v Register.v sequential_multiplier_tb.v
-
-
-Run the Simulation:
-This generates the .vcd file (waveform data).
-
-vvp multiplier_sim
+vvp sim_output
 
 
-(The simulation generates a wave.vcd file based on the test scenarios in the testbench.)
-
-View the Waveforms (GTKWave):
-Open the generated file to visually verify the circuit's behavior.
+View the Waveforms: Open the generated file to analyze timing, FSM states, and signal integrity.
 
 gtkwave wave.vcd
 
 
-📝 Configuration and Setup
+📌 Technical Details
 
-Tools Used: Icarus Verilog (iverilog), vvp, GTKWave.
+Language: Verilog HDL
 
-Time Unit: The simulations are configured with a timescale of 1ns / 1ps.
+Time Unit: 1ns / 1ps
 
-Data Width: Most generic modules use DATA_WIDTH = 8 by default, but testbenches often use DATA_WIDTH = 4 for easier result verification (e.g., in the multiplier example).
+Clock: CLK_PERIOD = 10ns (100 MHz)
 
-(C) [Your Name / Student Group] | Verilog HDL | Digital Systems
+Code Style: All modules are designed to be fully synchronous where required (registers) and purely combinational for logic gates (adders, comparators).
+
+Developed by Vasilescu Alexandru-Gabriel/333AA for Digital Systems. | Academic Year 2025 III
